@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "author": "JD",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-esp32-devkit-c-v4", "id": "esp", "top": -86.4, "left": 129.64, "attrs": {} },
+    {
+      "type": "wokwi-lcd2004",
+      "id": "lcd1",
+      "top": -137.6,
+      "left": 562.4,
+      "attrs": { "pins": "i2c" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": -61,
+      "left": -201.6,
+      "attrs": { "color": "green", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 99.95,
+      "left": -28.8,
+      "attrs": { "value": "10000" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn2",
+      "top": -3.4,
+      "left": -249.6,
+      "attrs": { "color": "blue", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn3",
+      "top": -3.4,
+      "left": -153.6,
+      "attrs": { "color": "yellow", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn4",
+      "top": 54.2,
+      "left": -201.6,
+      "attrs": { "color": "black", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": 119.15,
+      "left": -28.8,
+      "attrs": { "value": "10000" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r3",
+      "top": 138.35,
+      "left": -28.8,
+      "attrs": { "value": "10000" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r4",
+      "top": 157.55,
+      "left": -28.8,
+      "attrs": { "value": "10000" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn5",
+      "top": -157,
+      "left": -249.6,
+      "attrs": { "color": "white", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn6",
+      "top": -157,
+      "left": -134.4,
+      "attrs": { "color": "grey", "bounce": "0" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r5",
+      "top": 176.75,
+      "left": -28.8,
+      "attrs": { "value": "10000" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r6",
+      "top": 195.95,
+      "left": -28.8,
+      "attrs": { "value": "10000" }
+    }
+  ],
+  "connections": [
+    [ "esp:TX", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX", "$serialMonitor:TX", "", [] ],
+    [ "lcd1:GND", "esp:GND.2", "black", [ "h0" ] ],
+    [ "esp:5V", "lcd1:VCC", "red", [ "h-38.25", "v-211.2", "h124.5", "v-0.1" ] ],
+    [ "esp:21", "lcd1:SDA", "orange", [ "h76.8", "v-29" ] ],
+    [ "esp:22", "lcd1:SCL", "green", [ "h57.6", "v9.3" ] ],
+    [ "esp:3V3", "btn1:1.l", "magenta", [ "v-28.8", "h-355.05", "v19.2" ] ],
+    [ "esp:3V3", "btn2:1.l", "magenta", [ "v-28.8", "h-393.45", "v96" ] ],
+    [ "esp:3V3", "btn3:1.l", "magenta", [ "h0.15", "v-28.8", "h-384", "v76.8", "h96" ] ],
+    [ "esp:3V3", "btn4:1.l", "magenta", [ "h0.15", "v-28.8", "h-403.2", "v153.6" ] ],
+    [ "btn1:2.r", "esp:34", "green", [ "h29", "v9.8", "h239.85" ] ],
+    [ "btn1:2.r", "r1:1", "black", [ "h57.8", "v134.6" ] ],
+    [ "btn2:2.r", "esp:35", "green", [ "h29", "v-19" ] ],
+    [ "btn2:2.r", "r2:1", "black", [ "v19.4", "h57.8", "v76.8" ] ],
+    [ "btn3:2.r", "r3:1", "black", [ "h19.4", "v86.6" ] ],
+    [ "btn4:2.r", "r4:1", "black", [ "h19.4", "v48.2" ] ],
+    [ "r4:2", "r3:2", "black", [ "v0" ] ],
+    [ "r3:2", "r2:2", "black", [ "v0" ] ],
+    [ "r2:2", "r1:2", "black", [ "v0" ] ],
+    [ "r1:2", "esp:GND.1", "black", [ "v0" ] ],
+    [ "btn3:2.r", "esp:32", "green", [ "h38.6", "v-57.4" ] ],
+    [ "btn4:2.r", "esp:33", "green", [ "h96.2", "v-76.6" ] ],
+    [ "esp:3V3", "btn6:1.l", "magenta", [ "h0.15", "v-115.2", "h-278.4" ] ],
+    [ "esp:3V3", "btn5:1.l", "magenta", [ "h0.15", "v-115.2", "h-384" ] ],
+    [ "r6:2", "r5:2", "black", [ "v0" ] ],
+    [ "r5:2", "r4:2", "black", [ "v0" ] ],
+    [ "r5:1", "btn6:2.r", "black", [ "h-249.6", "v-278.4", "h211" ] ],
+    [ "r6:1", "btn5:2.r", "black", [ "h-259.2", "v-307.2", "h105.4" ] ],
+    [ "btn5:2.r", "esp:26", "blue", [ "h38.6", "v67.4", "h220.8", "v76.8" ] ],
+    [ "btn6:2.r", "esp:25", "blue", [ "h153.8", "v144.2" ] ]
+  ],
+  "serialMonitor": { "display": "auto", "newline": "lf", "convertEol": false },
+  "dependencies": {}
+}
