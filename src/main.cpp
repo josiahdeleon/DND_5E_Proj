@@ -2,8 +2,9 @@
 #include <Wire.h>
 #include <hd44780.h>
 #include <hd44780ioClass/hd44780_I2Cexp.h>
+#include <vector>
 
-
+using namespace std;
 // declare the lcd object for auto i2c address location
 hd44780_I2Cexp lcd;
 
@@ -27,7 +28,9 @@ int buttonInit[6] = {25,26,32,33,34,35};
 char alphNumBuff [53] = {'A','B','C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
                             'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',' '};
 
-String charClasses[8] = {"Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Sorcerer", "Wizard", "Warlock"};
+vector<String> charClassesVec({"Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Sorcerer", "Wizard", "Warlock"});
+
+vector<String> charRacesVec({"Amphibian", "Mamal", "Dog", "Cat", "Bird"});
 
 class playerCharacter{
   public: 
@@ -62,36 +65,38 @@ static char readData;
 static int pageDepth = 0; 
 // Creating interrupt routines to check which button is pressed
 // to move lcd cursor appropriately
+// Colors will change, colors reference online hardware sim
+// Green button; scrolls up
 void IRAM_ATTR buttonUp()
 {
   curUp = true;
   pageUpdate = true; 
 }
-
+// Black button; scrolls down
 void IRAM_ATTR buttonDown()
 {
   curDown = true;
   pageUpdate = true; 
 }
-
+// Blue button; scrolls left
 void IRAM_ATTR buttonLeft()
 {
   curLeft = true;
   pageUpdate = true; 
 }
-
+//  Yellow button; scrolls right
 void IRAM_ATTR buttonRight()
 {
   curRight = true;
   pageUpdate = true; 
 }
-
+// White button, selects the item the scroll bar is on
 void IRAM_ATTR buttonSelect()
 {
   selectPressed = true;
   pageUpdate = true; 
 }
-
+// Grey button, button to go back a page
 void IRAM_ATTR buttonBack()
 {
   //selectPressed = false; 
@@ -133,7 +138,7 @@ void setup() {
 		hd44780::fatalError(status); // does not return
 	}
   pc1.name = "Bongisimo          ";
-  pc1.charClass = charClasses[0];
+  pc1.charClass = charClassesVec[0];
   pc1.level = 20; 
   lcd.print("Setup Successful");
 }
@@ -148,12 +153,14 @@ void moveCursor(int columnOffset, int cursRow)
 // currently have to start all the way at A and scroll to select the character you want
 // TODO: Get the current character index so it doesn't start all the way at A
 // probably need to use a map
+// int editVal = map[dataToEdit[editPos]] might get the index of the current character and then display that char?
 void editSelectedSingleChar(String &dataToEdit)
   {
   // left/right character to edit 
   int editPos = 0;
   // up down character from a-z, A-Z
-  int editVal = 0;
+  // int editVal = map[dataToEdit[editPos]] might get the index of the current character and then display that char?
+  int editVal = -1;
   pageDepth++;
   // have to refresh the page when entering this function to ensure
   // everything is drawn in the correct location 
@@ -161,13 +168,15 @@ void editSelectedSingleChar(String &dataToEdit)
   lcd.setCursor(0,0);
   lcd.print(dataToEdit); 
   moveCursor(0,1);
+  // need to add roll over so you can go from z to A
   while(!backPressed)
    {
     if(curUp)
       {
-        if(editVal > 0)
+        editVal--;
+        if(editVal == -1)
         {
-          editVal--;
+          editVal = 52; 
         }
         dataToEdit[editPos] = alphNumBuff[editVal];
         // can probably make this chunk its own function eventually for all statements
@@ -178,12 +187,12 @@ void editSelectedSingleChar(String &dataToEdit)
         pageUpdate = false; 
         curUp = false;
       }
-
     if(curDown)
       {
-        if(editVal < 52)
+        editVal++;
+        if(editVal == 53)
         {
-          editVal++;
+          editVal = 0;
         }
         dataToEdit[editPos] = alphNumBuff[editVal];
         lcd.clear(); 
@@ -193,10 +202,9 @@ void editSelectedSingleChar(String &dataToEdit)
         pageUpdate = false; 
         curDown = false;
       }
-
     if(curLeft)
       {
-        editVal = 0;
+        editVal = -1;
         if(editPos > 0)
         {
           editPos--;
@@ -208,10 +216,9 @@ void editSelectedSingleChar(String &dataToEdit)
         pageUpdate = false; 
         curLeft = false;
       }
-
     if(curRight)
       {
-        editVal = 0;
+        editVal = -1;
         if(editPos < 19)
         {
           editPos++;
@@ -226,6 +233,100 @@ void editSelectedSingleChar(String &dataToEdit)
    }
     backPressed = false; 
   }
+// function to edit a predetermined field
+void editSelectedField(String &playerData, vector<String> fieldBuff, int &playerLvl) 
+{
+  int editPos = 0;
+  static int editVal = 0; 
+  int movCursorOffset = 10;
+  pageDepth++;
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(playerData); 
+  lcd.setCursor(15,0);
+  lcd.print(playerLvl);
+  moveCursor(movCursorOffset,0);
+  while(!backPressed)
+  {
+    if(curLeft && (editPos > 0))
+    {
+      editPos--; 
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(playerData); 
+      lcd.setCursor(15,0);
+      lcd.print(playerLvl);
+      moveCursor(10,0); 
+      pageUpdate = false;
+      curLeft = false; 
+    }
+    if(curRight && (editPos < 1))
+    {
+      editPos++;
+      lcd.clear();
+      lcd.setCursor(0,0);
+      lcd.print(playerData); 
+      lcd.setCursor(15,0);
+      lcd.print(playerLvl);
+      moveCursor(19,0); 
+      pageUpdate = false;
+      curRight = false;
+    }
+    if(curUp) // need to change edit value
+    {
+      lcd.clear();
+      lcd.setCursor(0,0);
+      if(editPos == 0)
+      {
+        editVal--; 
+        if(editVal == -1)
+        {
+          editVal = 7;
+        }
+        movCursorOffset = 10;
+      }
+      if(editPos == 1)
+      {
+        playerLvl++; 
+        movCursorOffset = 19;
+      }
+      playerData = fieldBuff[editVal]; 
+      lcd.print(playerData); 
+      lcd.setCursor(15,0);
+      lcd.print(playerLvl);
+      moveCursor(movCursorOffset,0);
+      pageUpdate = false;
+      curUp = false;
+    }
+    if(curDown)
+    {   
+      lcd.clear();
+      lcd.setCursor(0,0);
+      if(editPos == 0)
+      {
+        editVal++;
+        if(editVal == 8)
+        {
+          editVal = 0;
+        }
+        movCursorOffset = 10;
+      }
+      if(editPos == 1)
+      {
+        playerLvl--; 
+        movCursorOffset = 19;
+      }
+      playerData = fieldBuff[editVal]; 
+      lcd.print(playerData); 
+      lcd.setCursor(15,0);
+      lcd.print(playerLvl);
+      moveCursor(movCursorOffset,0);
+      pageUpdate = false;
+      curDown = false;  
+    }
+  }
+  backPressed = false;
+}
 
 void pageMainPage()
 {
@@ -295,7 +396,6 @@ void pageCharacterInfo()
     curUp = false; 
 
   }
-
   if(curDown && charPageRowCursor < 11)
   {
     charPageRowCursor+=2;
@@ -324,7 +424,7 @@ void pageCharacterInfo()
       if(selectPressed)
       {
       //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-      // editSelectedSingleChar(classLvlBuff);
+      editSelectedField(pc1.charClass, charClassesVec,pc1.level);
       selectPressed = false;
       }
       break; 
@@ -334,7 +434,7 @@ void pageCharacterInfo()
        if(selectPressed)
       {
       //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-       editSelectedSingleChar(pc1.race);
+       editSelectedField(pc1.race,charRacesVec);
        selectPressed = false;
       }
       break;
