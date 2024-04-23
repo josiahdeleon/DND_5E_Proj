@@ -61,9 +61,6 @@ class playerCharacter{
 };
 
 playerCharacter pc1; 
-// maxRow so cursor doesn't go below the last row item
-// if there are < 4 rows
-int maxRow = 3;
 // lcd read info to get what page or data you're selecting
 static char readData; 
 // data to see what page depth were on  
@@ -72,40 +69,24 @@ static int pageDepth = 0;
 // to move lcd cursor appropriately
 void IRAM_ATTR buttonUp()
 {
-  // if(cursorRow > 0)
-  // {
-  //   cursorRow--;
-  // }
   curUp = true;
   pageUpdate = true; 
 }
 
 void IRAM_ATTR buttonDown()
 {
-  // if(cursorRow < 19)
-  // {
-  //   cursorRow++;
-  // }
   curDown = true;
   pageUpdate = true; 
 }
 
 void IRAM_ATTR buttonLeft()
 {
-  // if(cursorColumn > 0)
-  // {
-  //   cursorColumn--;
-  // }
   curLeft = true;
   pageUpdate = true; 
 }
 
 void IRAM_ATTR buttonRight()
 {
-  // if(cursorColumn < 19)
-  // {
-  //   cursorColumn++;
-  // }
   curRight = true;
   pageUpdate = true; 
 }
@@ -156,7 +137,7 @@ void setup() {
     Serial.println(String("LCD setup failed with status: ") + status);
 		hd44780::fatalError(status); // does not return
 	}
-  pc1.name = "Bongisimo";
+  pc1.name = "Bongisimo          ";
   pc1.charClass = charClasses[0];
   pc1.level = 20; 
   lcd.print("Setup Successful");
@@ -168,28 +149,25 @@ void moveCursor(int columnOffset, int cursRow)
   lcd.print("-");
 }
 
-// pass in a read data field from lcd.read() to edit
-void editSelected(String dataToEdit)
+// pass in the selected data feild to edit character by character
+// currently have to start all the way at A and scroll to select the character you want
+// TODO: Get the current character index so it doesn't start all the way at A
+// probably need to use a map
+void editSelectedSingleChar(String &dataToEdit)
   {
   // left/right character to edit 
   int editPos = 0;
   // up down character from a-z, A-Z
   int editVal = 0;
   pageDepth++;
+  // have to refresh the page when entering this function to ensure
+  // everything is drawn in the correct location 
   lcd.clear(); 
   lcd.setCursor(0,0);
   lcd.print(dataToEdit); 
   moveCursor(0,1);
   while(!backPressed)
    {
-    // if(pageUpdate)
-    //   {
-    //     lcd.clear(); 
-    //     lcd.setCursor(0,0);
-    //     lcd.print(dataToEdit); 
-    //     moveCursor(editPos,1);
-    //     pageUpdate = false; 
-    //   }
     if(curUp)
       {
         if(editVal > 0)
@@ -197,6 +175,7 @@ void editSelected(String dataToEdit)
           editVal--;
         }
         dataToEdit[editPos] = alphNumBuff[editVal];
+        // can probably make this chunk its own function eventually for all statements
         lcd.clear(); 
         lcd.setCursor(0,0);
         lcd.print(dataToEdit); 
@@ -269,9 +248,7 @@ void pageMainPage()
   lcd.print("2:Attributes");
   lcd.setCursor(0,2);
   lcd.print("3:Combat Info");
-  // Draw cursor boy 
-  // probably need to add a select pressed counter to know what nested page we're on so 
-  // we can go back and forth on page depth
+  // Draw cursor boy for main page
   if(curUp && pageMainPageRowCursor > 0)
   {
     pageMainPageRowCursor--;
@@ -297,11 +274,11 @@ void pageMainPage()
     backPressed = false;
   }
 }
-
+// Page for specific character info
+// Displays Character name, Class/Level, Race, Background, Alignment
 void pageCharacterInfo()
 {
   // Cursor selector offset; 
-  char editData; 
   cursorColOffset = 18; 
   // cursorRow = 2;
   static int charPageRowCursor = 1; 
@@ -317,8 +294,6 @@ void pageCharacterInfo()
   lcd.clear(); 
   lcd.setCursor(0,0);
   
-  //0,2,4,6
-  //1,3,5,7
   if(curUp && charPageRowCursor > 1)
   {
     charPageRowCursor-=2;
@@ -335,14 +310,16 @@ void pageCharacterInfo()
   {
     backPressed = false;
   }
-  switch (charPageRowCursor) // TODO: need to redo this eventually
+  // This checks where the cursor position is and will scroll pages 
+  // TODO: need to redo this eventually
+  switch (charPageRowCursor) 
   {
     // Cursor over character name
     case 1:
       pgSel = 0;
       if(selectPressed)
       {
-       editSelected(pc1.name);
+       editSelectedSingleChar(pc1.name);
        selectPressed = false;
       }
       break;
@@ -352,7 +329,7 @@ void pageCharacterInfo()
       if(selectPressed)
       {
       //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-      // editSelected(classLvlBuff);
+      // editSelectedSingleChar(classLvlBuff);
       selectPressed = false;
       }
       break; 
@@ -362,7 +339,7 @@ void pageCharacterInfo()
        if(selectPressed)
       {
       //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-       editSelected(pc1.race);
+       editSelectedSingleChar(pc1.race);
        selectPressed = false;
       }
       break;
@@ -371,7 +348,7 @@ void pageCharacterInfo()
       if(selectPressed)
       {
       //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-       editSelected(pc1.background);
+       editSelectedSingleChar(pc1.background);
        selectPressed = false;
       }
       break;
@@ -380,7 +357,7 @@ void pageCharacterInfo()
       if(selectPressed)
       {
       //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-       editSelected(pc1.alignment);
+       editSelectedSingleChar(pc1.alignment);
        selectPressed = false;
       }
       break;
@@ -389,13 +366,15 @@ void pageCharacterInfo()
       if(selectPressed)
       {
       //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-       editSelected(pc1.playerName);
+       editSelectedSingleChar(pc1.playerName);
        selectPressed = false;
       }
      break;
     default:
       break; 
   }
+
+  // Prints the data for this page
   lcd.clear(); 
   lcd.print(pageCharacterInfoBuffer[pgSel]);
   lcd.setCursor(0,1);
@@ -405,13 +384,11 @@ void pageCharacterInfo()
   lcd.setCursor(0,3);
   lcd.print(pageCharacterDataBuffer[pgSel + 1]);
 
+  // only draw cursor every other line
   cursorRowOffset = charPageRowCursor - (pgSel*2);
-  // Want to transition pages when cursor draws on 1,5,9,13 so when charPageRowCursor = numbers, pgSel+=2;
-  // needs to be something like some count starting at 0 * 4 for cursor position; 
-  
   moveCursor(cursorColOffset, cursorRowOffset); 
 }
-
+// Will dispaly character attributes eventually
 void pageAttributesInfo()
 {
   if(backPressed)
@@ -422,7 +399,7 @@ void pageAttributesInfo()
   lcd.setCursor(0,0); 
   lcd.print("WIP Attributes"); 
 }
-
+// Will display combat info eventually
 void pageCombatInfo()
 {
   if(backPressed)
@@ -434,7 +411,7 @@ void pageCombatInfo()
   lcd.print("WIP Combat"); 
 }
 
-
+// Function to check what page we're on and display that page
 void displayPage()
 {
   if(pageDepth == 0)
@@ -471,4 +448,3 @@ void loop() {
   
   
 }
-
