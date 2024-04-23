@@ -7,11 +7,6 @@
 // declare the lcd object for auto i2c address location
 hd44780_I2Cexp lcd;
 
-// README
-// Controls: 
-// Scroll Up = Green, Scroll Down = Black
-// Select = White, Back = Grey
-
 // Init LCD with correct rows and columns
 const int row = 4; 
 const int column = 20; 
