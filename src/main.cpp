@@ -3,6 +3,7 @@
 #include <hd44780.h>
 #include <hd44780ioClass/hd44780_I2Cexp.h>
 
+
 // declare the lcd object for auto i2c address location
 hd44780_I2Cexp lcd;
 
@@ -20,12 +21,16 @@ bool curDown = false;
 bool curLeft = false;
 bool curRight = false; 
 bool selectPressed = false; 
+bool backPressed = false;
 bool cursorMoved = false;
 int cursorColumn = 0;
 int cursorRow = 0;
 int cursorColOffset = 0;
 int cursorRowOffset = 0; 
 int buttonInit[6] = {25,26,32,33,34,35};
+
+char alphNumBuff [53] = {'A','B','C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+                            'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',' '};
 
 String charClasses[8] = {"Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Sorcerer", "Wizard", "Warlock"};
 
@@ -59,12 +64,10 @@ playerCharacter pc1;
 // maxRow so cursor doesn't go below the last row item
 // if there are < 4 rows
 int maxRow = 3;
-// column offset for selector, differs depending on what page you're on
-int columnOffset = 0;
 // lcd read info to get what page or data you're selecting
-char readData; 
+static char readData; 
 // data to see what page depth were on  
-int pageDepth = 0; 
+static int pageDepth = 0; 
 // Creating interrupt routines to check which button is pressed
 // to move lcd cursor appropriately
 void IRAM_ATTR buttonUp()
@@ -116,11 +119,12 @@ void IRAM_ATTR buttonSelect()
 void IRAM_ATTR buttonBack()
 {
   //selectPressed = false; 
-  pageUpdate = true; 
+  backPressed = true;
   if(pageDepth > 0)
   {
     pageDepth--;
   }
+  pageUpdate = true;
 }
 
 // setup function to set GPIO, communication, and to set up devices
@@ -164,9 +168,94 @@ void moveCursor(int columnOffset, int cursRow)
   lcd.print("-");
 }
 
-void page1()
+// pass in a read data field from lcd.read() to edit
+void editSelected(String dataToEdit)
+  {
+  // left/right character to edit 
+  int editPos = 0;
+  // up down character from a-z, A-Z
+  int editVal = 0;
+  pageDepth++;
+  lcd.clear(); 
+  lcd.setCursor(0,0);
+  lcd.print(dataToEdit); 
+  moveCursor(0,1);
+  while(!backPressed)
+   {
+    // if(pageUpdate)
+    //   {
+    //     lcd.clear(); 
+    //     lcd.setCursor(0,0);
+    //     lcd.print(dataToEdit); 
+    //     moveCursor(editPos,1);
+    //     pageUpdate = false; 
+    //   }
+    if(curUp)
+      {
+        if(editVal > 0)
+        {
+          editVal--;
+        }
+        dataToEdit[editPos] = alphNumBuff[editVal];
+        lcd.clear(); 
+        lcd.setCursor(0,0);
+        lcd.print(dataToEdit); 
+        moveCursor(editPos,1);
+        pageUpdate = false; 
+        curUp = false;
+      }
+
+    if(curDown)
+      {
+        if(editVal < 52)
+        {
+          editVal++;
+        }
+        dataToEdit[editPos] = alphNumBuff[editVal];
+        lcd.clear(); 
+        lcd.setCursor(0,0);
+        lcd.print(dataToEdit); 
+        moveCursor(editPos,1);
+        pageUpdate = false; 
+        curDown = false;
+      }
+
+    if(curLeft)
+      {
+        editVal = 0;
+        if(editPos > 0)
+        {
+          editPos--;
+        }
+        lcd.clear(); 
+        lcd.setCursor(0,0);
+        lcd.print(dataToEdit); 
+        moveCursor(editPos,1);
+        pageUpdate = false; 
+        curLeft = false;
+      }
+
+    if(curRight)
+      {
+        editVal = 0;
+        if(editPos < 19)
+        {
+          editPos++;
+        }
+        lcd.clear(); 
+        lcd.setCursor(0,0);
+        lcd.print(dataToEdit); 
+        moveCursor(editPos,1);
+        pageUpdate = false; 
+        curRight = false;
+      }
+   }
+    backPressed = false; 
+  }
+
+void pageMainPage()
 {
-  static int page1RowCursor = 0;
+  static int pageMainPageRowCursor = 0;
   // set where the select cursor is going to be
   // cursorRow = 0; 
   // offset the selector cursor; 
@@ -183,31 +272,36 @@ void page1()
   // Draw cursor boy 
   // probably need to add a select pressed counter to know what nested page we're on so 
   // we can go back and forth on page depth
-  if(curUp && page1RowCursor > 0)
+  if(curUp && pageMainPageRowCursor > 0)
   {
-    page1RowCursor--;
+    pageMainPageRowCursor--;
     curUp = false; 
   }
 
-  if(curDown && page1RowCursor < 3)
+  if(curDown && pageMainPageRowCursor < 3)
   {
-    page1RowCursor++;
+    pageMainPageRowCursor++;
     curDown = false; 
   }
 
-  moveCursor(cursorColOffset,page1RowCursor);
+  moveCursor(cursorColOffset,pageMainPageRowCursor);
   if(selectPressed)
   {
-    lcd.setCursor(0,page1RowCursor);
+    lcd.setCursor(0,pageMainPageRowCursor);
     readData = lcd.read(); 
     pageDepth++; 
     selectPressed = false;
+  }
+  if(backPressed)
+  {
+    backPressed = false;
   }
 }
 
 void pageCharacterInfo()
 {
   // Cursor selector offset; 
+  char editData; 
   cursorColOffset = 18; 
   // cursorRow = 2;
   static int charPageRowCursor = 1; 
@@ -237,29 +331,72 @@ void pageCharacterInfo()
     charPageRowCursor+=2;
     curDown = false; 
   }
+  if(backPressed)
+  {
+    backPressed = false;
+  }
   switch (charPageRowCursor) // TODO: need to redo this eventually
   {
+    // Cursor over character name
     case 1:
       pgSel = 0;
+      if(selectPressed)
+      {
+       editSelected(pc1.name);
+       selectPressed = false;
+      }
       break;
+    // Cursor over Class/Level
     case 3:
       pgSel = 0; 
+      if(selectPressed)
+      {
+      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
+      // editSelected(classLvlBuff);
+      selectPressed = false;
+      }
       break; 
+    // Cursor over race
     case 5:
       pgSel = 2;
+       if(selectPressed)
+      {
+      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
+       editSelected(pc1.race);
+       selectPressed = false;
+      }
       break;
     case 7:
       pgSel = 2;
+      if(selectPressed)
+      {
+      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
+       editSelected(pc1.background);
+       selectPressed = false;
+      }
       break;
     case 9:
       pgSel = 4;
+      if(selectPressed)
+      {
+      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
+       editSelected(pc1.alignment);
+       selectPressed = false;
+      }
       break;
     case 11:
       pgSel = 4;
+      if(selectPressed)
+      {
+      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
+       editSelected(pc1.playerName);
+       selectPressed = false;
+      }
      break;
     default:
       break; 
   }
+  lcd.clear(); 
   lcd.print(pageCharacterInfoBuffer[pgSel]);
   lcd.setCursor(0,1);
   lcd.print(pageCharacterDataBuffer[pgSel]); 
@@ -277,6 +414,10 @@ void pageCharacterInfo()
 
 void pageAttributesInfo()
 {
+  if(backPressed)
+  {
+    backPressed = false;
+  }
   lcd.clear(); 
   lcd.setCursor(0,0); 
   lcd.print("WIP Attributes"); 
@@ -284,6 +425,10 @@ void pageAttributesInfo()
 
 void pageCombatInfo()
 {
+  if(backPressed)
+  {
+    backPressed = false;
+  }
   lcd.clear(); 
   lcd.setCursor(0,0); 
   lcd.print("WIP Combat"); 
@@ -294,7 +439,7 @@ void displayPage()
 {
   if(pageDepth == 0)
   {
-    page1(); 
+    pageMainPage(); 
   }
   if(pageDepth == 1)
   {
