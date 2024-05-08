@@ -3,6 +3,8 @@
 #include <hd44780.h>
 #include <hd44780ioClass/hd44780_I2Cexp.h>
 #include <vector>
+#include <map>
+
 
 using namespace std;
 // declare the lcd object for auto i2c address location
@@ -11,7 +13,6 @@ hd44780_I2Cexp lcd;
 // Init LCD with correct rows and columns
 const int row = 4; 
 const int column = 20; 
-bool pageUpdate = true; 
 bool curUp = false;
 bool curDown = false;
 bool curLeft = false;
@@ -28,47 +29,72 @@ int buttonInit[6] = {25,26,32,33,34,35};
 char alphNumBuff [53] = {'A','B','C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
                             'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z',' '};
 
+//TODO: can probably remove all of these generic buffers and throw this into one big string buffer
 vector<String> charClassesVec({"Barbarian", "Bard", "Cleric", "Druid", "Fighter", "Sorcerer", "Wizard", "Warlock"});
 
 vector<String> charRacesVec({"Amphibian", "Mamal", "Dog", "Cat", "Bird"});
 
 vector<String> editPageValues({"Name", "Attributes", "Classes/Level", "Combat Stats", "Race", "Background","Alignment",
                                 "Player Name"});
-vector<String> attributeValues({"Strength", "Dexterity", "Constitution", "intelligence", "Wisdom", "Charisma"});
+vector<String> attributeValues({"Strength", "Dexterity", "Constitution", "Intelligence", "Wisdom", "Charisma"});
 
 vector<String> editPageCombatStats({"Experience Points", "Proficiency Bonus", "Armor Class", "Initative", "Speed",
                                       "Max Hp", "Current Hp", "Temp Hp", "SplCst Class", "SplCst Ability", "SplSv DC", "SplSv Att Bnus"});
+
+vector<String> mainPageBuff = {"1:Character Info", "2:Attributes", "3:Combat Info", "4.Edit Character"};
+// Buffers for displaying information 
+vector<String> pageAllCharInfoBuff;
+vector<String> pageAttributesInfoBuff;
+
+enum Pages{
+  MAIN_PAGE = 0,
+  CHARACTER_INFO = 1, 
+  ATTRIBUTES_INFO = 2, 
+  COMBAT_INFO = 3, 
+  EDIT_INFO = 4,
+  EDIT_SELECT_SINGLE_CHAR = 5,
+  EDIT_CLASS = 7
+};
+
+enum PlayerAttributes
+{
+  STR = 0,
+  DEX = 1,
+  CON = 2,
+  INT = 3,
+  WIS = 4,
+  CHA = 5
+};
+
 class playerCharacter{
   public: 
-  struct attributes
-  {
-    int str,dex,con,inte,wis,cha; 
-  };
-  String name; 
-  String charClass;
-  int level;
-  String race; 
-  String background;
-  String alignment;
-  String playerName;
-  int experiencePoints;
-  int proficiencyBonus; 
-  int armorClass;
-  int initiative;
-  int speed; 
-  int maxHp, currHp, tempHp; 
-  String spellCastingClass; 
-  String spellCastingAbility; 
-  int spellSaveDc;
-  int spellAttackBonus; 
+    // using PlayerAttributes enums for the indexes of this array
+    int pcAttributes[6] = {0,0,0,0,0,0};
+    int pcAttributesModifier[6] = {0,0,0,0,0,0}; 
+    String name; 
+    String charClass;
+    int level;
+    String race; 
+    String background;
+    String alignment;
+    String playerName;
+    int experiencePoints;
+    int armorClass;
+    int initiative;
+    int speed; 
+    int maxHp, currHp, tempHp; 
+    String spellCastingClass; 
+    String spellCastingAbility; 
+    int spellSaveDc;
+    int spellAttackBonus; 
   // function: Calculate saving throws
 };
 
 playerCharacter pc1; 
 // lcd read info to get what page or data you're selecting
-static char readData; 
-// data to see what page depth were on  
-static int pageDepth = 0; 
+static char readData = '0';
+//TODO: Find a better way to assign a changing page number to the page enum
+static int pageNumber = MAIN_PAGE; 
 // Creating interrupt routines to check which button is pressed
 // to move lcd cursor appropriately
 // Colors will change, colors reference online hardware sim
@@ -76,41 +102,483 @@ static int pageDepth = 0;
 void IRAM_ATTR buttonUp()
 {
   curUp = true;
-  pageUpdate = true; 
 }
 // Black button; scrolls down
 void IRAM_ATTR buttonDown()
 {
-  curDown = true;
-  pageUpdate = true; 
+  curDown = true; 
 }
 // Blue button; scrolls left
 void IRAM_ATTR buttonLeft()
 {
   curLeft = true;
-  pageUpdate = true; 
 }
 //  Yellow button; scrolls right
 void IRAM_ATTR buttonRight()
 {
   curRight = true;
-  pageUpdate = true; 
 }
 // White button, selects the item the scroll bar is on
 void IRAM_ATTR buttonSelect()
 {
   selectPressed = true;
-  pageUpdate = true; 
 }
 // Grey button, button to go back a page
 void IRAM_ATTR buttonBack()
 {
-  if(pageDepth > 0)
+  backPressed = true;
+}
+
+void clearInterruptFlags()
+{
+  curUp = false;
+  curDown = false;
+  curLeft = false;
+  curRight = false;
+  selectPressed = false;
+  backPressed = false; 
+}
+// Function to calculate attribute modifier
+void calculateAttributeMod(int attribute, int &attributeMod, int proficiencyBonus)
+{
+  if(attribute == 12 || attribute == 13)
+    {
+      attributeMod = 1; 
+    }
+  if(attribute == 14 || attribute == 15)
+    {
+      attributeMod = 2; 
+    }
+  if(attribute == 16 || attribute == 17)
+    {
+      attributeMod = 3; 
+    }
+  if(attribute == 18 || attribute == 19)
+    {
+      attributeMod = 4; 
+    }
+  if(attribute == 20)
+    {
+      attributeMod = 5; 
+    }
+  // Add proficiency bonus if there is one.
+  attributeMod = attributeMod + proficiencyBonus;
+}
+//Super spaghetti function to update display buffers with new
+void upateDisplayBuffers()
+{
+  pageAllCharInfoBuff = {"Character Name: ", pc1.name, "Class/Level: ", pc1.charClass + "/" + pc1.level, 
+  "Race: ", pc1.race, "Background: ", pc1.background, "Alignment: ", pc1.alignment, "Player Name: ", pc1.playerName};
+  //TODO: Can probably turn this into a for loop if we want to shrink the LOC, but loop not needed
+  pageAttributesInfoBuff = {"Stat: Score/Mod:", 
+  attributeValues[STR] + "      " + pc1.pcAttributes[STR] + "/" + pc1.pcAttributesModifier[STR],
+  attributeValues[DEX] + "     " + pc1.pcAttributes[DEX] + "/" + pc1.pcAttributesModifier[DEX],
+  attributeValues[CON] + "  " + pc1.pcAttributes[CON] + "/" + pc1.pcAttributesModifier[CON],
+  attributeValues[INT] + "  " + pc1.pcAttributes[INT] + "/" + pc1.pcAttributesModifier[INT],
+  attributeValues[WIS] + "        " + pc1.pcAttributes[WIS] + "/" + pc1.pcAttributesModifier[WIS],
+  attributeValues[CHA] + "      " + pc1.pcAttributes[CHA] + "/" + pc1.pcAttributesModifier[CHA],
+  };
+}
+// TODO: Can probably make a generic move cursor function for all pages
+void moveCursor(int columnOffset, int cursRow)
+{
+  lcd.setCursor(columnOffset,cursRow);
+  lcd.print("-");
+}
+//TODO: Change this funciton later so that two references don't have to be passed
+// into this function and the next function
+void printEditSelectSingleChar(String &dataToEdit, int editPos)
+{
+  lcd.clear(); 
+  lcd.setCursor(0,0);
+  lcd.print(dataToEdit); 
+  moveCursor(editPos,1);
+}
+// pass in the selected data feild to edit character by character
+// currently have to start all the way at A and scroll to select the character you want
+// TODO: Get the current character index so it doesn't start all the way at A
+// probably need to use a map
+// int editVal = map[dataToEdit[editPos]] might get the index of the current character and then display that char?
+void editSelectedSingleChar(String &dataToEdit)
+{
+// left/right character to edit 
+int editPos = 0;
+// up down character from a-z, A-Z
+// int editVal = map[dataToEdit[editPos]] might get the index of the current character and then display that char?
+int editVal = 0;
+// have to refresh the page when entering this function to ensure
+// everything is drawn in the correct location 
+printEditSelectSingleChar(dataToEdit,editPos);
+while(pageNumber == EDIT_SELECT_SINGLE_CHAR)
   {
-    pageDepth--;
+  if(curUp)
+    {
+      editVal--;
+      if(editVal <= -1)
+      {
+        editVal = 52; 
+      }
+      dataToEdit[editPos] = alphNumBuff[editVal];
+      printEditSelectSingleChar(dataToEdit,editPos);
+      curUp = false;
+    }
+  if(curDown)
+    {
+      editVal++;
+      if(editVal == 53)
+      {
+        editVal = 0;
+      }
+      dataToEdit[editPos] = alphNumBuff[editVal];
+      printEditSelectSingleChar(dataToEdit,editPos);
+      curDown = false;
+    }
+  if(curLeft)
+    {
+      editVal = -1;
+      if(editPos > 0)
+      {
+        editPos--;
+      }
+      printEditSelectSingleChar(dataToEdit,editPos);      
+      curLeft = false;
+    }
+  if(curRight)
+    {
+      editVal = -1;
+      if(editPos < 19)
+      {
+        editPos++;
+      }
+      printEditSelectSingleChar(dataToEdit,editPos);      
+      curRight = false;
+    }
+  if(backPressed)
+    {
+      pageNumber = EDIT_INFO; 
+      backPressed = false; 
+    }
   }
-  //selectPressed = false;
-  pageUpdate = true;
+}
+void printEditClassLvl(String &playerData, int &playerLvl, int cursorOffset)
+{
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print(playerData); 
+  lcd.setCursor(15,0);
+  lcd.print(playerLvl);
+  moveCursor(cursorOffset,0);
+}
+// function to edit a predetermined field
+void editClassLvl(String &playerData, vector<String> fieldBuff, int &playerLvl) 
+{
+  int editPos = 0;
+  static int editVal = 0; 
+  int movCursorOffset = 10;
+  printEditClassLvl(playerData, playerLvl, movCursorOffset);
+  while(pageNumber == EDIT_CLASS)
+  {
+    if(curLeft)
+    {
+      if(editPos > 0)
+        {
+          editPos--; 
+          printEditClassLvl(playerData, playerLvl, 10);
+        }      
+      curLeft = false; 
+    }
+    if(curRight)
+    {
+      if(editPos < 1)
+      {
+        editPos++;
+        printEditClassLvl(playerData, playerLvl, 19);
+      }  
+      curRight = false;
+    }
+    if(curUp) // need to change edit value
+    {
+      lcd.clear();
+      lcd.setCursor(0,0);
+      if(editPos == 0)
+      {
+        editVal--; 
+        if(editVal == -1)
+        {
+          editVal = 7;
+        }
+        movCursorOffset = 10;
+      }
+      if(editPos == 1)
+      {
+        playerLvl++; 
+        movCursorOffset = 19;
+      }
+      playerData = fieldBuff[editVal]; 
+      printEditClassLvl(playerData, playerLvl, movCursorOffset);
+      curUp = false;
+    }
+    if(curDown)
+    {   
+      lcd.clear();
+      lcd.setCursor(0,0);
+      if(editPos == 0)
+      {
+        editVal++;
+        if(editVal == 8)
+        {
+          editVal = 0;
+        }
+        movCursorOffset = 10;
+      }
+      if(editPos == 1)
+      {
+        playerLvl--; 
+        movCursorOffset = 19;
+      }
+      playerData = fieldBuff[editVal]; 
+      printEditClassLvl(playerData, playerLvl, movCursorOffset);
+      curDown = false;  
+    }
+    if(backPressed)
+    {
+      pageNumber = EDIT_INFO;
+      backPressed = false;
+    }
+  }
+}
+
+// Function to take an input string buffer and display it on the LCD
+// String buffers should be defined in each page function
+// Each String index should be one line that you want to print on the LCD
+void printPageDisplayInfo(vector<String> infoBuffer, int buffOffset)
+{
+  // have to refresh the page when entering this function to ensure
+  // everything is drawn in the correct location 
+  lcd.clear();
+  for(int i = 0+buffOffset, j = 0; i <= 3+buffOffset; i++)
+  {
+   lcd.setCursor(0,j);
+   lcd.print(infoBuffer[i]);
+   j++; 
+  }
+}
+// Main Select Page
+//TODO: maybe add just one top level summary page
+void pageMainPage()
+{
+  static int pageMainPageRowCursor = 0;
+  int cursorColOffset = 18;
+  
+  printPageDisplayInfo(mainPageBuff, 0);
+  // Draws cursor selection on main page
+  moveCursor(cursorColOffset,pageMainPageRowCursor);
+  while(pageNumber == MAIN_PAGE)
+  {
+      if(curUp)
+      {
+        if(pageMainPageRowCursor > 0)
+        {
+          pageMainPageRowCursor--;
+          printPageDisplayInfo(mainPageBuff, 0);
+          moveCursor(cursorColOffset,pageMainPageRowCursor);
+        }
+        curUp = false; 
+      }
+      if(curDown)
+      {
+        if (pageMainPageRowCursor < 3)
+        {
+          pageMainPageRowCursor++;
+          printPageDisplayInfo(mainPageBuff, 0);
+          moveCursor(cursorColOffset,pageMainPageRowCursor);
+        }
+        curDown = false; 
+      }
+      if(selectPressed)
+      {
+        pageNumber = pageMainPageRowCursor + 1;
+        selectPressed = false;
+      }
+  }
+}
+// General function to print out pages that only display data
+void printPageNoEdit(vector<String> printBuff)
+{
+  int buffOffset = 0; 
+  int maxPrintBuffSize = printBuff.size();
+  Serial.println(maxPrintBuffSize);
+  lcd.clear(); 
+  printPageDisplayInfo(printBuff, buffOffset);
+  while(pageNumber != MAIN_PAGE)
+  {
+    if(curUp)
+    {
+      if (buffOffset > 1)
+      {
+        buffOffset-=4;
+        printPageDisplayInfo(printBuff, buffOffset);
+      }
+      curUp = false; 
+    }
+    if(curDown)
+    {
+      if(buffOffset < printBuff.size())
+      {
+        buffOffset+=4;
+        printPageDisplayInfo(printBuff, buffOffset);
+      }
+      curDown = false; 
+    }
+    if(backPressed)
+    {
+      backPressed = false;
+      pageNumber = MAIN_PAGE;
+    }
+  }
+}
+
+// Will display combat info eventually
+void pageCombatInfo()
+{
+  lcd.clear(); 
+  lcd.setCursor(0,0); 
+  lcd.print("WIP Combat"); 
+  while(pageNumber == COMBAT_INFO)
+  {
+    if(backPressed)
+    {
+      pageNumber = MAIN_PAGE;
+      backPressed = false; 
+    }
+    // need to add a delay for now because without it the interrupt doesn't trigger for some reason
+    delay(1);
+  }
+}
+//TODO: Remove when all edit pages are made
+void pageEditInfoWIP()
+{
+  lcd.clear(); 
+  lcd.setCursor(0,0);
+  lcd.print("WIP Edit");
+  while(pageNumber != EDIT_INFO)
+  {
+    if(backPressed)
+    {
+      pageNumber = EDIT_INFO;
+      backPressed = false;
+    }
+    delay(1);
+  }
+}
+void printPageEditCharInfo(int editPageNum, int offset)
+{
+  lcd.clear();
+  for(int i = 0; i < 4; i++)
+  {
+    lcd.setCursor(0,i);
+    lcd.print(editPageValues[i + offset]);
+  }
+    moveCursor(19,(editPageNum - offset));
+}
+void pageEditCharInfo()
+{
+  // sets up first page of the character edit screen
+  static int editPageNum = 0; 
+  static int cursorOffset = 0;
+  printPageEditCharInfo(editPageNum, cursorOffset);
+  // logic to display and edit your character data
+  while(pageNumber == EDIT_INFO)
+  {
+    if(curUp)
+    {
+      editPageNum--;
+      if(editPageNum <= -1)
+      {
+        editPageNum = 7; 
+      }
+      if((editPageNum >= 0) && (editPageNum < 4))
+      {
+        cursorOffset = 0;
+      }
+      if((editPageNum >= 4) && (editPageNum < 8))
+      {
+        cursorOffset = 4;
+      }
+
+      printPageEditCharInfo(editPageNum, cursorOffset);
+      curUp = false;
+    }
+    if(curDown)
+    {
+      editPageNum++;
+      if(editPageNum >= 8)
+      {
+        editPageNum = 0;
+      }
+      if((editPageNum >= 0) && (editPageNum < 4))
+      {
+        cursorOffset = 0;
+      }
+      if((editPageNum >= 4) && (editPageNum < 8))
+      {
+        cursorOffset = 4;
+      }
+      lcd.clear();
+      printPageEditCharInfo(editPageNum, cursorOffset);
+      curDown = false; 
+      
+    }
+    if(selectPressed)
+    {
+      selectPressed = false;
+      //We are on EDIT_INFO which is page 4 and then need to add + 1 because
+      //editPageNum is zero indexed and we are using editPageNum here to do 
+      //TODO: can probably make some sort of array or map to hold the below value and
+      //pass that into the edit function. 
+      pageNumber = editPageNum + EDIT_INFO + 1;
+    }
+    if(backPressed)
+    {
+      //pageNumber is changed back to MAIN_PAGE here since it's a static global.
+      backPressed = false; 
+      pageNumber = MAIN_PAGE;
+    }
+  }
+}
+// Function to check what page we're on and display that page
+void displayPage()
+{
+//TODO: Maybe find a better place to put the buffers that need to update when edited
+upateDisplayBuffers();
+  switch(pageNumber)
+  {
+    case MAIN_PAGE:
+      pageMainPage();
+      break;
+    case CHARACTER_INFO:
+      printPageNoEdit(pageAllCharInfoBuff); 
+      break;
+    case ATTRIBUTES_INFO:
+      printPageNoEdit(pageAttributesInfoBuff);
+      break;
+    case COMBAT_INFO:
+      pageCombatInfo(); 
+      break;
+    case EDIT_INFO:
+      pageEditCharInfo();
+      break;
+    case EDIT_SELECT_SINGLE_CHAR:
+      editSelectedSingleChar(pc1.name); 
+      break;
+    case 6: 
+      pageEditInfoWIP();
+      break;
+    case EDIT_CLASS:
+      editClassLvl(pc1.charClass,charClassesVec,pc1.level);
+    default:
+      break; 
+  }
 }
 
 // setup function to set GPIO, communication, and to set up devices
@@ -146,501 +614,10 @@ void setup() {
   pc1.charClass = charClassesVec[0];
   pc1.level = 20; 
   lcd.print("Setup Successful");
-}
-// void displayMultiLine(int startBuffIndex, int endBuffIndex, vector<String>toBeDisplayed1, vector<String>toBeDisplayed2)
-void moveCursor(int columnOffset, int cursRow)
-{
-  lcd.setCursor(columnOffset,cursRow);
-  lcd.print("-");
-}
-
-// pass in the selected data feild to edit character by character
-// currently have to start all the way at A and scroll to select the character you want
-// TODO: Get the current character index so it doesn't start all the way at A
-// probably need to use a map
-// int editVal = map[dataToEdit[editPos]] might get the index of the current character and then display that char?
-void editSelectedSingleChar(String &dataToEdit)
-  {
-  // left/right character to edit 
-  int editPos = 0;
-  // up down character from a-z, A-Z
-  // int editVal = map[dataToEdit[editPos]] might get the index of the current character and then display that char?
-  int editVal = 0;
-  pageDepth++;
-  // have to refresh the page when entering this function to ensure
-  // everything is drawn in the correct location 
-  lcd.clear(); 
-  lcd.setCursor(0,0);
-  lcd.print(dataToEdit); 
-  moveCursor(0,1);
- 
-  while(pageDepth == 2)
-   {
-    if(curUp)
-      {
-        editVal--;
-        if(editVal == -1)
-        {
-          editVal = 52; 
-        }
-        dataToEdit[editPos] = alphNumBuff[editVal];
-        // can probably make this chunk its own function eventually for all statements
-        lcd.clear(); 
-        lcd.setCursor(0,0);
-        lcd.print(dataToEdit); 
-        moveCursor(editPos,1);
-        pageUpdate = false; 
-        curUp = false;
-      }
-    if(curDown)
-      {
-        editVal++;
-        if(editVal == 53)
-        {
-          editVal = 0;
-        }
-        dataToEdit[editPos] = alphNumBuff[editVal];
-        lcd.clear(); 
-        lcd.setCursor(0,0);
-        lcd.print(dataToEdit); 
-        moveCursor(editPos,1);
-        pageUpdate = false; 
-        curDown = false;
-      }
-    if(curLeft)
-      {
-        editVal = -1;
-        if(editPos > 0)
-        {
-          editPos--;
-        }
-        lcd.clear(); 
-        lcd.setCursor(0,0);
-        lcd.print(dataToEdit); 
-        moveCursor(editPos,1);
-        pageUpdate = false; 
-        curLeft = false;
-      }
-    if(curRight)
-      {
-        editVal = -1;
-        if(editPos < 19)
-        {
-          editPos++;
-        }
-        lcd.clear(); 
-        lcd.setCursor(0,0);
-        lcd.print(dataToEdit); 
-        moveCursor(editPos,1);
-        pageUpdate = false; 
-        curRight = false;
-      }
-   }
-  }
-// function to edit a predetermined field
-void editClassLvl(String &playerData, vector<String> fieldBuff, int &playerLvl) 
-{
-  int editPos = 0;
-  static int editVal = 0; 
-  int movCursorOffset = 10;
-  pageDepth++; 
-  lcd.clear();
-  lcd.setCursor(0,0);
-  lcd.print(playerData); 
-  lcd.setCursor(15,0);
-  lcd.print(playerLvl);
-  moveCursor(movCursorOffset,0);
-  while(pageDepth == 2)
-  {
-    if(curLeft && (editPos > 0))
-    {
-      editPos--; 
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print(playerData); 
-      lcd.setCursor(15,0);
-      lcd.print(playerLvl);
-      moveCursor(10,0); 
-      pageUpdate = false;
-      curLeft = false; 
-    }
-    if(curRight && (editPos < 1))
-    {
-      editPos++;
-      lcd.clear();
-      lcd.setCursor(0,0);
-      lcd.print(playerData); 
-      lcd.setCursor(15,0);
-      lcd.print(playerLvl);
-      moveCursor(19,0); 
-      pageUpdate = false;
-      curRight = false;
-    }
-    if(curUp) // need to change edit value
-    {
-      lcd.clear();
-      lcd.setCursor(0,0);
-      if(editPos == 0)
-      {
-        editVal--; 
-        if(editVal == -1)
-        {
-          editVal = 7;
-        }
-        movCursorOffset = 10;
-      }
-      if(editPos == 1)
-      {
-        playerLvl++; 
-        movCursorOffset = 19;
-      }
-      playerData = fieldBuff[editVal]; 
-      lcd.print(playerData); 
-      lcd.setCursor(15,0);
-      lcd.print(playerLvl);
-      moveCursor(movCursorOffset,0);
-      pageUpdate = false;
-      curUp = false;
-    }
-    if(curDown)
-    {   
-      lcd.clear();
-      lcd.setCursor(0,0);
-      if(editPos == 0)
-      {
-        editVal++;
-        if(editVal == 8)
-        {
-          editVal = 0;
-        }
-        movCursorOffset = 10;
-      }
-      if(editPos == 1)
-      {
-        playerLvl--; 
-        movCursorOffset = 19;
-      }
-      playerData = fieldBuff[editVal]; 
-      lcd.print(playerData); 
-      lcd.setCursor(15,0);
-      lcd.print(playerLvl);
-      moveCursor(movCursorOffset,0);
-      pageUpdate = false;
-      curDown = false;  
-    }
-  }
-}
-
-void pageMainPage()
-{
-  static int pageMainPageRowCursor = 0;
-  // set where the select cursor is going to be
-  // cursorRow = 0; 
-  // offset the selector cursor; 
-  cursorColOffset = 18; 
-  // have to refresh the page when entering this function to ensure
-  // everything is drawn in the correct location 
-  lcd.clear();
-  lcd.setCursor(0,0); 
-  lcd.print("1:Character Info");
-  lcd.setCursor(0,1);
-  lcd.print("2:Attributes");
-  lcd.setCursor(0,2);
-  lcd.print("3:Combat Info");
-  lcd.setCursor(0,3);
-  lcd.print("4.Edit Character");
-  // Draw cursor boy for main page
-  if(curUp && pageMainPageRowCursor > 0)
-  {
-    pageMainPageRowCursor--;
-    curUp = false; 
-  }
-
-  if(curDown && pageMainPageRowCursor < 3)
-  {
-    pageMainPageRowCursor++;
-    curDown = false; 
-  }
-
-  moveCursor(cursorColOffset,pageMainPageRowCursor);
-  if(selectPressed)
-  {
-    lcd.setCursor(0,pageMainPageRowCursor);
-    readData = lcd.read(); 
-    pageDepth++; 
-    selectPressed = false;
-  }
-}
-// Page for specific character info
-// Displays Character name, Class/Level, Race, Background, Alignment
-void pageCharacterInfo()
-{
-  // Cursor selector offset; 
-  cursorColOffset = 18; 
-  // cursorRow = 2;
-  static int charPageRowCursor = 1; 
-  static int pgSel = 0;
-  static int cursorRowOffset = 0;
-  static int buttonPressCount = 0;
-  String classLvlBuff = pc1.charClass + ": " + pc1.level; 
-  String pageCharacterInfoBuffer[6] = {"Character Name: ", "Class/Level: ", "Race: ", 
-  "Background: ", "Alignment: ", "Player Name: "};
-  String pageCharacterDataBuffer[6] = {pc1.name, classLvlBuff, pc1.race, pc1.background, 
-  pc1.alignment, pc1.playerName};
-  
-  lcd.clear(); 
-  lcd.setCursor(0,0);
-  
-  if(curUp && charPageRowCursor > 1)
-  {
-    charPageRowCursor-=2;
-    curUp = false; 
-
-  }
-  if(curDown && charPageRowCursor < 11)
-  {
-    charPageRowCursor+=2;
-    curDown = false; 
-  }
-  // doesn't do anything atm
-  if(backPressed)
-  {
-    backPressed = false;
-  }
-  // This checks where the cursor position is and will scroll pages 
-  // TODO: need to redo this eventually
-  switch (charPageRowCursor) 
-  {
-    // Cursor over character name
-    case 1:
-      pgSel = 0;
-      // if(selectPressed)
-      // {
-      //  editSelectedSingleChar(pc1.name);
-      //  selectPressed = false;
-      // }
-      break;
-    // Cursor over Class/Level
-    case 3:
-      pgSel = 0; 
-      // if(selectPressed)
-      // {
-      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-      // editClassLvl(pc1.charClass, charClassesVec,pc1.level);
-      selectPressed = false;
-      // }
-      break; 
-    // Cursor over race
-    case 5:
-      pgSel = 2;
-       if(selectPressed)
-      {
-      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-       //editClassLvl(pc1.race,charRacesVec);
-       selectPressed = false;
-      }
-      break;
-    case 7:
-      pgSel = 2;
-      if(selectPressed)
-      {
-      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-      //  editSelectedSingleChar(pc1.background);
-       selectPressed = false;
-      }
-      break;
-    case 9:
-      pgSel = 4;
-      if(selectPressed)
-      {
-      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-      //  editSelectedSingleChar(pc1.alignment);
-       selectPressed = false;
-      }
-      break;
-    case 11:
-      pgSel = 4;
-      if(selectPressed)
-      {
-      //Instead of editing the whole thing, have a buffer of classes to select/scroll through
-      //  editSelectedSingleChar(pc1.playerName);
-       selectPressed = false;
-      }
-     break;
-    default:
-      break; 
-  }
-
-  // Prints the data for this page
-  lcd.clear(); 
-  lcd.print(pageCharacterInfoBuffer[pgSel]);
-  lcd.setCursor(0,1);
-  lcd.print(pageCharacterDataBuffer[pgSel]); 
-  lcd.setCursor(0,2);
-  lcd.print(pageCharacterInfoBuffer[pgSel + 1]);
-  lcd.setCursor(0,3);
-  lcd.print(pageCharacterDataBuffer[pgSel + 1]);
-
-  // only draw cursor every other line
-  cursorRowOffset = charPageRowCursor - (pgSel*2);
-  moveCursor(cursorColOffset, cursorRowOffset); 
-}
-// Will dispaly character attributes eventually
-void pageAttributesInfo()
-{
-  lcd.clear(); 
-  lcd.setCursor(0,0); 
-  lcd.print("WIP Attributes"); 
-}
-// Will display combat info eventually
-void pageCombatInfo()
-{
-  lcd.clear(); 
-  lcd.setCursor(0,0); 
-  lcd.print("WIP Combat"); 
-}
-void pageEditCharInfo()
-{
-  // sets up first page of the character edit screen
-  static int editPageNum = 0; 
-  static int cursorOffset = 0;
-  // need to find a better way to do page depth.
-  lcd.clear(); 
-  for(int i = 0; i < 4; i++)
-  {
-    lcd.setCursor(0,i);
-    lcd.print(editPageValues[i]);
-  }
-  moveCursor(19,0);
-  // logic to display and edit your character data
-  // can do some sort of page offset to use a single loop to print the page
-  // can probably do if(pageDepth == whatever page depth) as well, should make it consistent
-  while(pageDepth == 1)
-  {
-    if(curUp)
-    {
-      editPageNum--;
-      if(editPageNum == -1)
-      {
-        editPageNum = 7; 
-      }
-      if((editPageNum >= 0) && (editPageNum < 4))
-      {
-        
-        cursorOffset = 0;
-      }
-      if((editPageNum >= 4) && (editPageNum < 8))
-      {
-        cursorOffset = 4;
-      }
-      lcd.clear();
-      // can maybe turn this into its own function
-      for(int i = 0; i < 4; i++)
-      {
-        lcd.setCursor(0,(i));
-        lcd.print(editPageValues[i + cursorOffset]);
-      }
-      moveCursor(19,(editPageNum - cursorOffset));
-      curUp = false;
-      pageUpdate = false;
-    }
-    if(curDown)
-    {
-      editPageNum++;
-      if(editPageNum == 8)
-      {
-        editPageNum = 0;
-      }
-      if((editPageNum >= 0) && (editPageNum < 4))
-      {
-        
-        cursorOffset = 0;
-      }
-      if((editPageNum >= 4) && (editPageNum < 8))
-      {
-        cursorOffset = 4;
-      }
-      lcd.clear();
-      // can maybe turn this into its own function
-      for(int i = 0; i < 4; i++)
-      {
-        lcd.setCursor(0,(i));
-        lcd.print(editPageValues[i + cursorOffset]);
-      }
-      moveCursor(19,(editPageNum - cursorOffset));
-      curDown = false; 
-      pageUpdate = false;
-    }
-    if(selectPressed)
-    {
-      switch(editPageNum)
-      {
-      // edit player name
-      case 0:
-        editSelectedSingleChar(pc1.name); 
-        selectPressed = false; 
-        break;
-      case 1:
-          // TODO: Impliment
-          //editAttributes()
-          selectPressed = false;
-          break;
-      case 2:
-        editClassLvl(pc1.charClass, charClassesVec ,pc1.level); 
-      default:
-        selectPressed = false;
-        break;
-      }
-      // update LCD before going back to previous screen
-      lcd.clear();
-      // can maybe turn this into its own function
-      for(int i = 0; i < 4; i++)
-      {
-        lcd.setCursor(0,(i));
-        lcd.print(editPageValues[i + cursorOffset]);
-      }
-      moveCursor(19,(editPageNum - cursorOffset));
-    }
-  }
-}
-
- 
-// Function to check what page we're on and display that page
-void displayPage()
-{
-  if(pageDepth == 0)
-  {
-    pageMainPage(); 
-  }
-  if(pageDepth == 1)
-  {
-    switch(readData)
-    {
-      case '1':
-        pageCharacterInfo(); 
-        break;
-      case '2':
-        pageAttributesInfo();
-        break;
-      case '3':
-        pageCombatInfo(); 
-        break;
-      case '4':
-        pageEditCharInfo();
-      default:
-        break; 
-    }
-  }
+  pc1.pcAttributes[STR] = 13;
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  if(pageUpdate)
-  {
-    pageUpdate = false;
-    // insert switch case to determine page we're on
+  // insert switch case to determine page we're on
     displayPage();
   }
-  
-  
-}
